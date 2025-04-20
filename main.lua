@@ -19,6 +19,7 @@ local boxScale = boxSize/32
 
 local score = 0
 local displayScore = score
+local finalScore = score
 
 local topDiff = 50
 
@@ -107,6 +108,13 @@ local function isEndangered(x, y)
   return false
 end
 
+local function addScore(amount)
+  score = score + amount
+  if score > highScore then
+    highScore = score
+  end
+end
+
 local function unpackCol(c)
   return c[1], c[2], c[3]
 end
@@ -152,7 +160,7 @@ end
 
 local function doDestroyCheck()
   local destrX = {}
-  local destr = false
+  local destr = 0
   local scoreToAdd = 0
   for x, t in pairs(boxes) do
     --vertical(column) check
@@ -173,6 +181,7 @@ local function doDestroyCheck()
       if not boxes[x][y] then break end
       if x == numBoxes then
         print("row ", y, "is full!")
+        destr = destr + 1
         success = true
       end
     end
@@ -181,7 +190,6 @@ local function doDestroyCheck()
       for x, t in pairs(boxes) do
         scoreToAdd = scoreToAdd + numBoxes * 2
         boxes[x][y] = nil
-        destr = true
       end
     end
   end
@@ -189,10 +197,10 @@ local function doDestroyCheck()
   for _, x in pairs(destrX) do
     boxes[x] = {}
     scoreToAdd = scoreToAdd + numBoxes * 2
-    destr = true
+    destr = destr + 1
   end
 
-  if destr then
+  if destr > 0 then
     destrSound:stop()
     destrSound:setPitch(math.min(streak, 5)/20 + 1)
     destrSound:play()
@@ -211,16 +219,17 @@ local function placeShape(shape, x, y, c)
     end
   end
   local scrAdd, destr = doDestroyCheck()
-  if not destr then
+  if destr == 0 then
     movesSinceStreak = movesSinceStreak + 1
     if movesSinceStreak > 3 then
       streak = 0
     end
   else
-    streak = streak + 1
+    streak = streak + destr
     movesSinceStreak = 0
   end
-  score = score + scrAdd*getStreakMultiplier()
+
+  addScore(scrAdd*getStreakMultiplier())
   if score > highScore then
     highScore = score
   end
@@ -296,7 +305,7 @@ function love.load()
 
   placeSound = love.audio.newSource("assets/place.wav", "static")
   destrSound = love.audio.newSource("assets/destr.mp3", "static")
-  destrSound:setVolume(.3)
+  destrSound:setVolume(1)
 
   music = love.audio.newSource("assets/music.mp3", "stream")
   music:setLooping(true)
@@ -476,7 +485,7 @@ local function drawMenu()
 end
 
 local function drawGameOver()
-  gameOverDisplayScore = lerp(gameOverDisplayScore, score, .1)
+  gameOverDisplayScore = lerp(gameOverDisplayScore, finalScore, .1)
 
   love.graphics.setColor(toCol(255))
 
@@ -489,7 +498,7 @@ local function drawGameOver()
   love.graphics.print(prStr, w/2 - prWidth/2, gameOverY() + gameOverH + 40)
 
   love.graphics.setColor(toCol(255))
-  prStr = tostring(math.floor(gameOverDisplayScore))
+  prStr = tostring(math.floor(gameOverDisplayScore + 1))
   prWidth = gameOverHeadingFont:getWidth(prStr)
   love.graphics.setFont(gameOverHeadingFont)
   love.graphics.print(prStr, w/2 - prWidth/2, gameOverY() + gameOverH + 43 + gameOverSubHeadingFont:getHeight())
@@ -612,7 +621,7 @@ function love.draw()
   love.graphics.setColor(toCol(255))
   love.graphics.setFont(scoreFont)
   
-  local scoreText = tostring(math.floor(displayScore))
+  local scoreText = tostring(math.ceil(displayScore))
   local scoreWidth = scoreFont:getWidth(scoreText)
   love.graphics.print(scoreText, w/2 - scoreWidth/2, 125)
 
@@ -642,20 +651,7 @@ function love.mousepressed(mb)
     clickSound:stop()
     clickSound:play()
 
-    didLose = true
-
-    return
-  end
-
-  if isPointInRect(mx, my, giveUpX(), playButtonY(), giveUpButtonW, giveUpButtonH) and inMenu then
-    clickSound:stop()
-    clickSound:play()
-    inMenu = false
-  end
-
-  if isPointInRect(mx, my, giveUpX(), returnButtonY, giveUpButtonW, giveUpButtonH) and didLose then
-    clickSound:stop()
-    clickSound:play()
+    finalScore = score
 
     streak = 0
     movesSinceStreak = 0
@@ -672,6 +668,22 @@ function love.mousepressed(mb)
       b.hide = false
     end
     refillQueue()
+
+    didLose = true
+
+    return
+  end
+
+  if isPointInRect(mx, my, giveUpX(), playButtonY(), giveUpButtonW, giveUpButtonH) and inMenu then
+    clickSound:stop()
+    clickSound:play()
+    inMenu = false
+  end
+
+  if isPointInRect(mx, my, giveUpX(), returnButtonY, giveUpButtonW, giveUpButtonH) and didLose then
+    clickSound:stop()
+    clickSound:play()
+
     didLose = false
     gameOverDisplayScore = 0
   end
@@ -685,7 +697,7 @@ function love.mousereleased(mb)
   local x, y = getGridPosWithOffset(draggingTL[1], draggingTL[2])
   if x and y and not draggingColliding then
     placeShape(draggingShape, x, y, draggingCol)
-    score = score + #draggingShape.verts
+    addScore(#draggingShape.verts * getStreakMultiplier())
     draggingB.curShape = nil
     draggingB.hide = false
     
