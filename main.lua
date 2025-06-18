@@ -281,6 +281,13 @@ local function isInGame()
   return not didLose and not inMenu
 end
 
+local function updateMusicVolume()
+  music:setVolume(musicOn and .5 or 0)
+  destrSound:setVolume(musicOn and 1 or 0)
+  placeSound:setVolume(musicOn and 1 or 0)
+  clickSound:setVolume(musicOn and .3 or 0)
+end
+
 function love.load()
   if love.system.getOS() == 'iOS' or love.system.getOS() == 'Android' then
     love.window.setMode(love.graphics.getHeight(), love.graphics.getWidth())
@@ -329,6 +336,15 @@ function love.load()
   giveUpY = function()
     return h - giveUpButtonH - 10
   end
+
+  volumeOn = love.graphics.newImage("assets/volumeOn.png")
+  volumeOff = love.graphics.newImage("assets/volumeOff.png")
+  volumeOnSize = 30
+  volumeOnScale = volumeOnSize/volumeOn:getHeight()
+  volumeOnW = volumeOn:getWidth() * volumeOnScale
+  volumeOnH = volumeOn:getHeight() * volumeOnScale
+
+  musicOn = true
 
 
   --menu stuff
@@ -416,13 +432,18 @@ function love.load()
   end
 
   local savedData = lume.deserialize(love.filesystem.read("save.txt"))
-  if savedData and type(savedData) == "table"then
+  if savedData and type(savedData) == "table" then
     score = savedData.score or score
     displayScore = score
     streak = savedData.streak or streak
     movesSinceStreak = savedData.movesSinceStreak or movesSinceStreak
     boxes = savedData.boxes or boxes
     highScore = savedData.highScore or highScore
+    musicOn = savedData.musicOn
+
+    if musicOn == nil then
+      musicOn = true
+    end
     
     if savedData.curShapes then
       for i, b in pairs(shapeQueueButtons) do
@@ -437,6 +458,8 @@ function love.load()
   else
     refillQueue()
   end
+
+  updateMusicVolume()
 end
 
 function love.update()
@@ -617,10 +640,14 @@ function love.draw()
     end
   end
 
+  if not musicOn then
+    love.graphics.setColor(toCol(250, 125, 125))
+  end
+  love.graphics.draw(musicOn and volumeOn or volumeOff, w - volumeOnW - 10, 55, 0, volumeOnScale)
+
   --text
-  love.graphics.setColor(toCol(255))
   love.graphics.setFont(scoreFont)
-  
+  love.graphics.setColor(toCol(255))
   local scoreText = tostring(math.ceil(displayScore))
   local scoreWidth = scoreFont:getWidth(scoreText)
   love.graphics.print(scoreText, w/2 - scoreWidth/2, 125)
@@ -687,6 +714,11 @@ function love.mousepressed(mb)
     didLose = false
     gameOverDisplayScore = 0
   end
+
+  if isPointInRect(mx, my, w - volumeOnW - 10, 55, volumeOnW, volumeOnH) and isInGame() then
+    musicOn = not musicOn
+    updateMusicVolume()
+  end
 end
 
 function love.mousereleased(mb)
@@ -714,6 +746,12 @@ function love.mousereleased(mb)
   end
 end
 
+function love.keypressed(k)
+  if k == "f11" then
+      love.window.setFullscreen(not love.window.getFullscreen())
+  end
+end
+
 function love.quit()
   local curShapes = {}
 
@@ -729,6 +767,7 @@ function love.quit()
     boxes = boxes,
     curShapes = curShapes,
     highScore = highScore,
+    musicOn = musicOn
   }
 
   local serialized = lume.serialize(data)
